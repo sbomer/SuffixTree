@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Text;
+//using Mono.Cecil;
+//using Mono.Cecil.Cil;
 
 namespace SuffixTree
 {
@@ -117,12 +119,24 @@ namespace SuffixTree
             _AP.ActiveParent = _root;
         }
 
-        private void ExtendTree(char c)
+        // max remainder during construction is length of longest repeated substring
+        private int _maxRemainder = -1;
+        private int _endPoint = -1;
+        public (int length, int end) GetLongestRepeatedSubstring ()
+        {
+            return (_maxRemainder, _endPoint);
+        }
+
+        public void ExtendTree(char c)
         {
             _chars.Add(c);
             _needSuffixLink = null;
             _position++;
             _remainder++;
+            if (_remainder > _maxRemainder) {
+                _maxRemainder = _remainder;
+                _endPoint = _position;
+            }
 
             while (_remainder > 0)
             {
@@ -228,12 +242,20 @@ namespace SuffixTree
             return true;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private string DecodeLabel(string chars) {
+            // utf-16 encoded string. I just want to get out one byte at a time, and
+            // represent it as a string. ignore endianness for now.
+            var bytes = Encoding.Unicode.GetBytes (chars);
+            return BitConverter.ToString(bytes).Replace("-", "");
+        }
+
         /// <summary>
         /// Creates a string representation of the tree in a rather primitive way.
         /// Works only with tree content consisting of lowercase a-z characters.
         /// Perhaps useful for debugging.
         /// </summary>
-        public string PrintTree()
+        public string PrintTree() //Dictionary<char, Instruction> instruction)
         {
             var sb = new StringBuilder();
 
@@ -244,29 +266,50 @@ namespace SuffixTree
             void Print(int depth, Node node)
             {
                 var activeOrigin = "";
-                var nodeLabel = LabelOf(node);
+                var strNodeLabel = LabelOf(node);
+                var nodeLabel = DecodeLabel(strNodeLabel); // string representation of the bytes for our characters
+
                 var openEndMark = "";
                 var linkMark = "";
 
                 if (node == _AP.ActiveParent)
                     activeOrigin = ">";
 
-                if (node == _AP.ActiveEdge)
-                    nodeLabel = nodeLabel.Insert(_AP.ActiveLength, " | ");
+                if (node == _AP.ActiveEdge) {
+                    // decode the length
+                    // each character is 2 bytes, or 4 hexadecimal digits
+                    var len = _AP.ActiveLength * 4;
+                    nodeLabel = nodeLabel.Insert(len, " | ");
+                }
 
                 if (node.IsLeaf)
                     openEndMark = "...";
 
-                if (GetLinkFor(node, out var linkedNode))
-                    linkMark = " -> " + FirstCharOf(linkedNode);
-
-                sb.AppendLine(new string(' ', depth + 1 - activeOrigin.Length) + activeOrigin + depth + ":" + nodeLabel + openEndMark + linkMark);
-
-                for (char c = 'a'; c <= 'z'; c++)
-                {
-                    if (_structure.TryGetValue((node, c), out var childNode))
-                        Print(depth + 1, childNode);
+                if (GetLinkFor(node, out var linkedNode)) {
+                    var firstChar = FirstCharOf(linkedNode);
+                    var firstCharHex = DecodeLabel("" + firstChar);
+                    linkMark = " -> " + firstCharHex;
                 }
+
+                var label = "" + activeOrigin + depth + ":";
+//                var intr = instruction[strNodeLabel[0]];
+                sb.AppendLine(new string(' ', depth + 1 - activeOrigin.Length) + label + nodeLabel + openEndMark + linkMark);
+//                sb.AppendLine(new string(' ', depth + 1 - activeOrigin.Length) + new string(' ', label.Length) + instr.ToString());
+
+                foreach (var e in _structure) {
+                    var (_node, _c) = e.Key;
+                    if (_node != node)
+                        continue;
+                    var childNode = e.Value;
+
+                    Print(depth + 1, childNode);
+                }
+
+//                 for (char c = 'a'; c <= 'z'; c++)
+//                 {
+//                     if (_structure.TryGetValue((node, c), out var childNode))
+//                         Print(depth + 1, childNode);
+//                 }
             }
         }
     }
