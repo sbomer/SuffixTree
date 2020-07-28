@@ -243,7 +243,7 @@ namespace SuffixTree
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private string DecodeLabel(string chars) {
+        public static string DecodeLabel(string chars) {
             // utf-16 encoded string. I just want to get out one byte at a time, and
             // represent it as a string. ignore endianness for now.
             var bytes = Encoding.Unicode.GetBytes (chars);
